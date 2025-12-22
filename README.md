@@ -1,9 +1,9 @@
-# DTN UDP Convergence Layer Version 2 (UDPCLv2)
+# Bundle Protocol (BP) Manifest Block
 
-The internet-draft is hosted at [draft-ietf-dtn-udpcl](https://datatracker.ietf.org/doc/draft-ietf-dtn-udpcl/).
+The internet-draft is hosted at [draft-sipos-dtn-manifest-block](https://datatracker.ietf.org/doc/draft-sipos-dtn-manifest-block/).
 
-A local build of the current main branch is available [draft-ietf-dtn-udpcl.html](https://briansipos.github.io/dtn-bpbis-udpcl/draft-ietf-dtn-udpcl.html) with its [misspelling.txt](https://briansipos.github.io/dtn-bpbis-udpcl/misspelling.txt).
-A difference from the datatracker draft and this local version can be [viewed side-by-side](https://author-tools.ietf.org/diff?doc_1=draft-ietf-dtn-udpcl&url_2=https://briansipos.github.io/dtn-bpbis-udpcl/draft-ietf-dtn-udpcl.txt&raw=1).
+A local build of the current main branch is available [draft-sipos-dtn-manifest-block.html](https://briansipos.github.io/dtn-manifest-block/draft-sipos-dtn-manifest-block.html) with its [misspelling.txt](https://briansipos.github.io/dtn-manifest-block/misspelling.txt).
+A difference from the datatracker draft and this local version can be [viewed side-by-side](https://author-tools.ietf.org/diff?doc_1=draft-sipos-dtn-manifest-block&url_2=https://briansipos.github.io/dtn-manifest-block/draft-sipos-dtn-manifest-block.txt&raw=1).
 
 Prerequisites to building can be installed on Ubuntu with:
 ```
