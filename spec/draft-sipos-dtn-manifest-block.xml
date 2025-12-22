@@ -1,0 +1,877 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude" category="std" consensus="true" docName="draft-sipos-dtn-manifest-block-00" ipr="trust200902" sortRefs="true" submissionType="IETF" tocInclude="true" version="3" xml:lang="en">
+  <front>
+    <title abbrev="BP Manifest">Bundle Protocol (BP) Manifest Block</title>
+    <seriesInfo name="Internet-Draft" value="draft-sipos-dtn-manifest-block-00"/>
+    <author fullname="Brian Sipos" initials="B." surname="Sipos">
+      <organization abbrev="JHU/APL">The Johns Hopkins University Applied Physics Laboratory</organization>
+      <address>
+        <postal>
+          <street>11100 Johns Hopkins Rd.</street>
+          <city>Laurel</city>
+          <region>MD</region>
+          <code>20723</code>
+          <country>United States of America</country>
+        </postal>
+        <email>brian.sipos+ietf@gmail.com</email>
+      </address>
+    </author>
+    <date/>
+    <area>Transport</area>
+    <workgroup>Delay-Tolerant Networking</workgroup>
+    <abstract>
+      <t>
+This document defines an extension block type for Bundle Protocol version 7 to capture discretionary summary data about the state of a Bundle at the time the Manifest block was added.
+This Manifest structure is a general purpose container for information about other blocks, and can be used as a piece-part of a larger security operation.
+      </t>
+    </abstract>
+  </front>
+  <middle>
+    <section anchor="sec-intro">
+      <name>Introduction</name>
+      <t>
+The structure of data in Bundle Protocol (BP) version 7 <xref target="RFC9171"/> is to divide each independent Bundle into a sequence of blocks.
+The first "primary" block is mandatory and immutable during the Bundle lifetime, the last "payload" block is mandatory and contains the application data unit (ADU) being transported, and all other blocks in between them are "extension" blocks of various types and orders as needed by the BP network.
+Each non-primary "canonical" block (<xref section="4.3.2" target="RFC9171"/>) of a Bundle contains a block type code point, a unique-to-the-bundle block number, and block-type-specific data (BTSD) containing a byte string encoded and interpreted according to the associated block type.
+      </t>
+      <t>
+While the primary and payload blocks are mandatory, each extension block instance (not type) will have a lifecycle controlled by policy and configuration on each node along its path from source to destination (including those two end nodes).
+Any extension block present at some point along that path will have been created along with or after the Bundle and will be discarded along with or before the Bundle.
+Some of the extension blocks provide security operations, for integrity or confidentiality, in accordance with Bundle Protocol Security (BPSec) <xref target="RFC9172"/>.
+      </t>
+      <t>
+The purpose of the Manifest block type specified in this document is to allow a node to capture some or all of the state of a Bundle as that Bundle transits the node (either as the source or an intermediate forwarding node).
+Each manifest includes metadata about when and why it was created as a way for later users of the block to filter Manifests based on policy.
+One initial use case for a Manifest, defined in <xref target="sec-reason-aad-hashing"/>, is to optimize how a security operation targeting one block can be bound to the state of other blocks at the time the operation is added to a Bundle.
+      </t>
+      <section>
+        <name>Scope</name>
+        <t>
+This document describes the encoding and interpretation of the BTSD content for the Manifest block type, and its initial reason codes and use cases.
+This document does not address:
+        </t>
+        <ul>
+          <li>
+Other potential Manifest reason codes, which can be defined in other specifications and either registered with IANA or use codes from the private use block.
+          </li>
+          <li>
+Policies or mechanisms for when and how other extension blocks are added to, modified in, or discarded from a Bundle.
+          </li>
+          <li>
+Policies about when and how BPSec security operations targeting or covering a Manifest block are added to, modified in, or discarded from a Bundle.
+          </li>
+        </ul>
+      </section>
+      <section>
+        <name>Use of CDDL</name>
+        <t>
+This document defines CBOR structure using the Concise Data Definition Language (CDDL) <xref target="RFC8610"/>.
+The entire CDDL structure can be extracted from the XML version of this document using the XPath expression:
+        </t>
+        <sourcecode>'//sourcecode[@type="cddl"]'</sourcecode>
+        <t>
+The following initial fragment defines the top-level symbols of this document's CDDL.
+        </t>
+        <sourcecode type="cddl">
+start = ext-data-manifest
+        </sourcecode>
+        <t>
+The definitions for the rules <tt>dtn-time</tt>, and <tt>extension-block</tt>, <tt>block-control-flags</tt>, the socket <tt>$extension-block</tt>, and the generic rule <tt>extension-block-use</tt> are taken from BP <xref target="RFC9171"/>.
+        </t>
+      </section>
+      <section anchor="sec-terminology">
+        <name>Terminology</name>
+        <t>
+The key words "<bcp14>MUST</bcp14>", "<bcp14>MUST NOT</bcp14>", "<bcp14>REQUIRED</bcp14>", "<bcp14>SHALL</bcp14>", "<bcp14>SHALL NOT</bcp14>", "<bcp14>SHOULD</bcp14>", "<bcp14>SHOULD NOT</bcp14>", "<bcp14>RECOMMENDED</bcp14>", "<bcp14>NOT RECOMMENDED</bcp14>", "<bcp14>MAY</bcp14>", and "<bcp14>OPTIONAL</bcp14>" in this document are to be interpreted as described in BCP 14 <xref target="RFC2119"/> <xref target="RFC8174"/> when, and only when, they appear in all capitals, as shown here.
+        </t>
+      </section>
+    </section>
+    <section anchor="sec-content">
+      <name>Manifest Block Content</name>
+      <t>
+The BTSD content for the Manifest block type consists of a CBOR sequence <xref target="RFC8742"/> of a metadata map followed by an array of block-derived data maps.
+Each other block referenced by a Manifest is referred to here as "covered" by that Manifest.
+      </t>
+      <t>
+Items in the metadata map <bcp14>SHALL</bcp14> be interpreted according to the "Manifest Metadata Items" IANA registry defined in <xref target="sec-iana-manifest"/>.
+Its initial contents are defined in <xref target="sec-content-metadata"/> in text and CDDL.
+      </t>
+      <t>
+The coverage of blocks by a single Manifest is discretionary to the node creating the Manifest (see <xref target="sec-proc-create"/>).
+A single Manifest does not not need to cover all blocks present at the time of its creation, and which blocks are covered will depend on the <xref target="sec-metadata-reason">reason</xref> why the Manifest was created.
+The creator of a Manifest block <bcp14>MAY</bcp14> cover any other block present in the Bundle.
+A verifier of a Manifest block <bcp14>SHALL NOT</bcp14> assume or rely on a Manifest to cover any or all other blocks in the Bundle.
+      </t>
+      <t>
+Items in each block data map <bcp14>SHALL</bcp14> be interpreted according to the "Manifest Data Items" IANA registry defined in <xref target="sec-iana-manifest"/>.
+Its initial contents are defined in <xref target="sec-content-blockdata"/> in text and CDDL.
+      </t>
+      <t>
+A block covered by a Manifest <bcp14>MAY</bcp14> be the target of a BPSec confidentiality operation before or after creation of the Manifest.
+It is a deployment and usage consideration to ensure that policy controlling Manifest lifecycles is consistent with policy controlling confidentiality lifecycles.
+      </t>
+      <t>
+A block covered by a Manifest <bcp14>MAY</bcp14> be discarded at any time after creation of the Manifest.
+One potential future reason for a Manifest would be to record when specific blocks <em>are</em> discarded by a node.
+      </t>
+      <figure anchor="fig-ext-data-manifest">
+        <name>Manifest BTSD Content CDDL</name>
+        <sourcecode type="cddl"><![CDATA[
+; Manifest is encoded in BTSD content as a sequence
+; EDITOR NOTE: block type 255 is a placeholder for IANA assignment
+$extension-block /=
+  extension-block-use<255, (bstr .cborseq ext-data-manifest / bstr)>
+ext-data-manifest = [
+  metadata-map,
+  [* blockdata-map]
+]
+
+; General structure of all maps in the manifest
+manifest-structure = {
+  * int16 => any
+}
+int16 = -32768 .. 32767
+
+; Metadata item socket
+metadata-map = {* $$metadata-item } .within manifest-structure
+; Block data item socket
+blockdata-map = {* $$blockdata-item } .within manifest-structure
+]]></sourcecode>
+      </figure>
+      <section anchor="sec-content-metadata">
+        <name>Well-known Metadata Items</name>
+        <t>
+The metadata items, and their keys, defined in this section apply only to the first map within the Manifest BTSD content.
+These items relate to the creation of the Manifest itself and not to any individual blocks covered by the Manifest.
+        </t>
+        <section anchor="sec-metadata-reason">
+          <name>Reason</name>
+          <t>
+This item is used to convey the reason code for why the Manifest was created, the audience for its verification, and how it is intended to be used.
+This item <bcp14>SHALL</bcp14> use map key 0 and value of an <tt>int16</tt> interpreted according to the "Manifest Reason Codes" IANA registry defined in <xref target="sec-iana-manifest"/>.
+          </t>
+          <figure anchor="fig-metadata-reason">
+            <name>Reason CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$metadata-item //= (
+  0: int16
+)
+]]></sourcecode>
+          </figure>
+        </section>
+        <section>
+          <name>Manifest Source</name>
+          <t>
+This item is used to represent the source node of the enclosing Manifest block.
+This item <bcp14>SHALL</bcp14> use map key 2 and value of a <tt>bstr</tt>-wrapped EID value.
+This enveloping is in accordance with recommendations in <xref section="4" target="I-D.ietf-dtn-eid-pattern"/>.
+          </t>
+          <figure anchor="fig-metadata-source">
+            <name>Manifest Source CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$metadata-item //= (
+  2: embed-eid-structure
+)
+; TODO: copied from [draft-ietf-dtn-eid-pattern] but should be reference
+embed-eid-structure = bstr .cbor eid-structure
+]]></sourcecode>
+          </figure>
+        </section>
+        <section>
+          <name>Timestamp</name>
+          <t>
+The item is used to represent the absolute time of the local timekeeper on the source of the Manifest block when it was created.
+This item <bcp14>SHALL</bcp14> use map key 3 and value of a <tt>dtn-time</tt> in accordance with <xref section="4.2.6" target="RFC9171"/>.
+          </t>
+          <figure anchor="fig-metadata-timestamp">
+            <name>Timestamp CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$metadata-item //= (
+  3: dtn-time
+)
+]]></sourcecode>
+          </figure>
+        </section>
+      </section>
+      <section anchor="sec-content-blockdata">
+        <name>Common Block Items</name>
+        <t>
+The block data items, and their keys, defined in this section apply to all block types equivalently and can be present for any associated block type.
+These items relate to the BPv7 canonical block structure as defined in <xref section="4.3.2" target="RFC9171"/> without concern for the specific block type or content of the BTSD.
+        </t>
+        <section>
+          <name>Block Identity</name>
+          <t>
+This item is used to reference a specific other canonical block in the same Bundle as the Manifest.
+All other items in the same block data map are about the block referenced by this item.
+This item <bcp14>SHALL</bcp14> use map key 1 and value of an array containing two items: the block type of the other block as a <tt>uint</tt> and the block number of the other block as a <tt>uint</tt>.
+This array has the same order as the first two items of the canonical block array encoding.
+          </t>
+          <figure anchor="fig-blockdata-ident">
+            <name>Block Identity CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$blockdata-item //= (
+  ? 1: block-id
+)
+block-id = [
+  ; From the IANA Bundle Block Types registry
+  block-type: uint,
+  block-num: uint,
+]
+]]></sourcecode>
+          </figure>
+          <t>
+A prerequisite to verifying any of the block data items involves first looking up the block referenced from the block number of this item.
+Verification of this item <bcp14>SHALL</bcp14> consist of matching the block type of the item against block type of the referenced block.
+          </t>
+        </section>
+        <section>
+          <name>Block Flags</name>
+          <t>
+This item is used to convey the "Block processing control flags" value at the time the Manifest is created.
+This item <bcp14>SHALL</bcp14> use map key 2 and value of a <tt>uint</tt> representing the flags.
+          </t>
+          <figure anchor="fig-blockdata-flags">
+            <name>Block Flags CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$blockdata-item //= (
+  ? 2: block-control-flags
+)
+]]></sourcecode>
+          </figure>
+          <t>
+Verification of this item <bcp14>SHALL</bcp14> consist of matching the item value against the Block processing control flags of the referenced block.
+          </t>
+        </section>
+        <section>
+          <name>BTSD Length</name>
+          <t>
+This item is used to convey the length of the BTSD content (<em>i.e.</em>, the argument of the CBOR head of the BTSD item) at the time the Manifest is created.
+This item <bcp14>SHALL</bcp14> use map key 5 and value of a <tt>uint</tt> representing a length in bytes.
+          </t>
+          <figure anchor="fig-blockdata-btsd-length">
+            <name>BTSD Length CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$blockdata-item //= (
+  5: btsd-len
+)
+btsd-len = uint
+]]></sourcecode>
+          </figure>
+          <t>
+Verification of this item <bcp14>SHALL</bcp14> consist of matching the item value against the length of the BTSD of the referenced block.
+          </t>
+        </section>
+        <section>
+          <name>BTSD Hash</name>
+          <t>
+This item is used to convey a concise summary of BTSD content (<em>i.e.</em>, the byte string within the BTSD item) without revealing the content itself.
+This item <bcp14>SHALL</bcp14> use map key 6 and value of an array containing a sequence of pairs of items.
+Each pair <bcp14>SHALL</bcp14> consist of a "COSE Algorithms" value <xref target="IANA-COSE"/> representing the hash algorithm used, and the hash as a <tt>bstr</tt>.
+The input to the hash <bcp14>SHALL</bcp14> be the content of the BTSD of the referenced block, excluding any CBOR head associated with the BTSD item itself.
+          </t>
+          <figure anchor="fig-blockdata-btsd-hash">
+            <name>BTSD Hash CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$blockdata-item //= (
+  ; One or more pair of hash outputs
+  6: [+ btsd-hash]
+)
+btsd-hash = (
+  ; From the IANA COSE Algorithms registry
+  alg: tstr / int,
+  value: bstr
+)
+]]></sourcecode>
+          </figure>
+          <t>
+Verification of this item <bcp14>SHALL</bcp14> consist of matching at least one of the BTSD Hash values included in the Manifest against a locally computed hash of the content of the BTSD of the referenced block.
+          </t>
+          <t>
+It is expected that truncated hash algorithms (<em>e.g.</em>, SHA-256/64) can be used to trade hash output size for security strength.
+The choice of which hash algorithm(s) to use for any covered block is an implementation decision (and discussed in <xref target="sec-security-weakhash"/>).
+          </t>
+        </section>
+      </section>
+      <section>
+        <name>Security Block Items</name>
+        <t>
+The block items, and their keys, defined in this section <bcp14>SHALL</bcp14> apply only to block types for Block Integrity (11) and Block Confidentiality (12).
+These items relate to the abstract security block (ASB) structure as defined in <xref section="3.6" target="RFC9172"/> within its BTSD content.
+        </t>
+        <section>
+          <name>Security Targets</name>
+          <t>
+This item is used to convey the target block numbers present in the security block at the time the Manifest is created.
+This item <bcp14>SHALL</bcp14> use map key -1 and value of an array of <tt>uint</tt> representing block numbers.
+The order of the target block numbers in this item <bcp14>SHOULD</bcp14> be the same as the original security block.
+          </t>
+          <figure anchor="fig-bpsec-targets">
+            <name>Security Targets CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$blockdata-item //= (
+  -1: bpsec-targets
+)
+bpsec-targets = [+ uint ]
+]]></sourcecode>
+          </figure>
+          <t>
+Verification of this item <bcp14>SHALL</bcp14> consist of matching the targets array in this item against the ASB field of the referenced block.
+It is not relevant to this verification as to whether or not the referenced target blocks themselves are present.
+          </t>
+        </section>
+        <section>
+          <name>Security Context ID</name>
+          <t>
+This item is used to convey the Context ID field at the time the Manifest is created.
+This item <bcp14>SHALL</bcp14> use map key -2 and value of an <tt>int16</tt> representing one of the "BPSec Security Context Identifiers" <xref target="IANA-BUNDLE"/> from the security block.
+          </t>
+          <figure anchor="fig-bpsec-ctxid">
+            <name>Security Context CDDL</name>
+            <sourcecode type="cddl"><![CDATA[
+$$blockdata-item //= (
+  -2: int16
+)
+]]></sourcecode>
+          </figure>
+          <t>
+Verification of this item <bcp14>SHALL</bcp14> consist of matching the value of this item against the ASB field of the referenced block.
+It is not relevant to this verification as to whether or not the security context is known to the verifying node.
+          </t>
+        </section>
+      </section>
+    </section>
+    <section anchor="sec-proc">
+      <name>Manifest Processing</name>
+      <t>
+There are two processing activities associated with the Manifest block type: creating the manifest and verifying it.
+Those are defined in the following subsections.
+      </t>
+      <t>
+A Manifest is intended to be a snapshot of part of the Bundle state at its time of creation.
+There is no defined concept of a Manifest being manipulated by an intermediate node; any manipulation would be the result of bad configuration or an on-path attack (<xref target="sec-threat-manip"/>).
+      </t>
+      <section anchor="sec-proc-create">
+        <name>Creation</name>
+        <t>
+The decision of when and why a Manifest is created and added to a Bundle is a local policy decision on a node.
+        </t>
+        <t>
+The Reason item <bcp14>SHALL</bcp14> be present in all metadata maps.
+This metadata item is needed by other nodes to filter Manifest blocks and to interpret their semantics.
+The definition of a reason code can refine and require specific metadata or block data items to be present (see <xref target="sec-reason"/>).
+        </t>
+        <t>
+The selection of which blocks to cover by a Manifest is also a local policy decision and likely depends on the Reason code.
+Each covered block will correspond with a separate block data map.
+        </t>
+        <t>
+The Block Identity item <bcp14>SHALL</bcp14> be present in each block data map.
+All of the other items in the block data map depend on its block number to create and verify, and some (specifically negative keys) depend on its block type.
+        </t>
+      </section>
+      <section anchor="sec-proc-verify">
+        <name>Verification</name>
+        <t>
+The general Manifest verification procedure checks items in each block data map against the actual block data.
+Because blocks can be discarded after a Manifest has been created, one possible outcome for an individual block verification is that the block is missing; a missing covered block is a valid outcome and does not affect the verification of other blocks referenced by the same Manifest.
+It is a policy decision for how to act upon the outcome of verification, including cases of missing covered blocks.
+        </t>
+        <t>
+The verification of a Manifest <bcp14>SHALL</bcp14> include checking whether the Manifest covers a minimum set of blocks, and if each block data map contains a minimum set of items.
+It is a matter of local policy on a verifier (within constraints for the associated Reason) to determine the minimum acceptable coverage for any particular Manifest.
+        </t>
+        <t>
+The verification of a Manifest <bcp14>SHALL</bcp14> include verification of each item contained in each block data map based on the individual item definitions.
+It is an implementation matter to determine whether verification of a single block needs to stop on the first failure or continue to verify all items.
+The definition of a reason code can refine and require specific metadata or block data items to succeed in verification (see <xref target="sec-reason"/>).
+        </t>
+      </section>
+    </section>
+    <section anchor="sec-reason">
+      <name>Initial Manifest Reasons</name>
+      <t>
+This section defines the semantics and constraints of manifest reason codes for the initial registry assignments in <xref target="tab-iana-manifest-reason"/>.
+      </t>
+      <section anchor="sec-reason-endtoend">
+        <name>Preserve Extensions</name>
+        <t>
+When bundles are being forwarded through one or more transit networks on their path from source to destination, it is useful to be able to mark at ingress which extension blocks need to be preserved during the transit across those networks.
+This marking could be created by the edge nodes themselves or by a routing node on either side of the ingress hop.
+        </t>
+        <t>
+The Manifest reason "Preserve Extensions" (code 2) <bcp14>SHALL</bcp14> be used to indicate that the Manifest block is intended to mark one or more blocks as needing to be kept in the Bundle until the Manifest itself is discarded.
+        </t>
+        <t>
+When this reason is present, the block itself <bcp14>SHALL</bcp14> be marked with block processing control flags having bit 2 set, indicating "Delete bundle if block can't be processed."
+        </t>
+        <t>
+When this reason is present in the metadata map, each block data map <bcp14>SHALL</bcp14> contain a Block Identity (key 1).
+When this reason is present in the metadata map, each block data map <bcp14>MAY</bcp14> contain a BTSD Length (key 5) and/or BTSD Hash (key 6).
+        </t>
+        <t>
+When verifying for this reason, if any block is missing or has a mismatch with the Manifest the entire verification <bcp14>SHALL</bcp14> be considered to have failed.
+        </t>
+      </section>
+      <section anchor="sec-reason-aad-hashing">
+        <name>Security AAD Hashing</name>
+        <t>
+The definition of external additional authenticated data (AAD) in the BPSec COSE context <xref target="I-D.ietf-dtn-bpsec-cose"/> allows an arbitrary number of other blocks (both canonical block metadata and BTSD) to be bound to a security operation on a single target block.
+Using external AAD coverage allows a security verifier or acceptor to assert that (a chosen subset of) the state of those other blocks at the time of verification matches their state at the time the operation was added to the Bundle.
+The use of direct BTSD-in-external-AAD is depicted in <xref target="fig-aad-direct"/>.
+        </t>
+        <t>
+A side effect of AAD directly covering the BTSD of other blocks is the need to serialize that BTSD as input to the COSE message processing, at the security source and for all verifiers and acceptors.
+For cases where the AAD covers large BTSD, including that of the payload block, this can impose a large data handling burden on the security processing entity (specifically its cryptographic element).
+        </t>
+        <figure anchor="fig-aad-direct">
+          <name>Security AAD Using Other Blocks Directly</name>
+          <artwork align="center" type="ascii-art"><![CDATA[
+       Target BTSD
+         +----------------+
+         |                |
++--------+---+   +--------v---+ +------------+
+|  Security  |   |   Target   | |  Other     |
+|   Block    |   |   Block    | |  Blocks... |
++---^----+---+   +---^--------+ +---^----^---+
+    |    |           |              |    |
+    +----+-----------+--------------+----+
+       AAD from any block header or BTSD
+]]></artwork>
+        </figure>
+        <t>
+A common way to mitigate this need for cryptographic processing of large data is distill the data using a hash algorithm and then use the hash value as input to the cryptographic function.
+This preimage hashing is available for the target of a security operation using a COSE Hash Envelope <xref target="I-D.ietf-cose-hash-envelope"/> but is not available for its external AAD.
+A straightforward use of a Manifest block, defined later in this section, is to capture the hash values of other blocks for external AAD coverage and thus reduce the size of that external AAD needed as cryptographic input.
+        </t>
+        <figure>
+          <name>Security AAD Using a Manifest</name>
+          <artwork align="center" type="ascii-art"><![CDATA[
+       Target BTSD
+         +---------------------------------+
+         |                                 |
++--------+---+   +------------+   +--------v---+ +------------+
+|  Security  |   |  Manifest  |   |   Target   | |  Other     |
+|   Block    |   |   Block    |   |   Block    | |  Blocks... |
++---^----+---+   +---^----^-+-+   +---^--------+ +---^----^---+
+    |    |           |    |  \        |              |    |
+    +----+-----------+----+   --------+--------------+----+
+       AAD (header + BTSD)    Cover with header + BTSD Hash
+]]></artwork>
+        </figure>
+        <t>
+Because some block types will necessarily have a small expected BTSD length, this use case involves a trade between using a hashing manifest, to guarantee external AAD size, and just using the other block BTSD in the AAD scope directly.
+For example, when using an overall security strength needing a SHA-384 hash a BTSD Hash item will contain a <tt>bstr</tt> value of 48 bytes.
+If the other block being included is a Hop Count type (<xref section="4.4.3" target="RFC9171"/>) it will never have a BTSD larger than 19 bytes (or more realistically, for hop limits below 64k, no larger than 7 bytes).
+It is an implementation matter by the manifest and security source to determine how and when to apply BTSD hashing for external AAD.
+        </t>
+        <t>
+The Manifest reason "Security AAD Hashing" (code 1) <bcp14>SHALL</bcp14> be used to indicate that the Manifest block is intended to distill the BTSD of one or more blocks in the Bundle to be included in some security scope.
+        </t>
+        <t>
+When this reason is present, the block itself <bcp14>SHALL</bcp14> be marked with block processing control flags having bit 2 set, indicating "Delete bundle if block can't be processed."
+<cref>TBD: is this adequate to handle middle-boxes that don't care about the Manifest (or any other) block content?</cref>
+        </t>
+        <t>
+For this use case the Manifest Source will be identical to the Security Source of the security block using this Manifest in its AAD scope.
+When this reason is present in the metadata map, each block data map <bcp14>SHALL</bcp14> contain the following items:
+        </t>
+        <ul>
+          <li>Block Identity (key 1)</li>
+          <li>Block Flags (key 2)</li>
+          <li>BTSD Hash (key 6)</li>
+        </ul>
+        <t>
+When this reason is present in the metadata map, each block data map <bcp14>MAY</bcp14> contain a BTSD Length (key 5).
+        </t>
+        <t>
+When verifying for this reason, if any block is missing or has a mismatch with the Manifest the entire verification <bcp14>SHALL</bcp14> be considered to have failed.
+        </t>
+        <t>
+When a Manifest with this reason is included in the target or AAD scope of a security operation, the full verification of that operation <bcp14>SHALL</bcp14> include verifying the Manifest.
+This logic does not need to be implemented as part of BPSec processing, but can be done as part of larger security policy alongside BPSec proper.
+Although successful verification now requires both BPSec verification and Manifest verification, the order in which these two occur can be done in either order (or even concurrently).
+Choosing a desirable order allows an implementation to optimize further for expected success and failure modes.
+        </t>
+      </section>
+      <section anchor="sec-reason-sec-accept">
+        <name>Security Acceptance</name>
+        <t>
+When a BPSec security operation is accepted by a node, the security target and its associated security results are removed from the ASB structure of its parent security block.
+Because the ASB retains no history of security actions, a removal due to acceptance is not visible downstream from the acceptor node any differently than malicious removal by an on-path attacker.
+The reason defined in this section allows security acceptance to be recorded for downstream auditing <xref target="I-D.tian-dtn-sbam"/>.
+        </t>
+        <t>
+The Manifest reason "Security Acceptance" (code 3) <bcp14>SHALL</bcp14> be used to indicate that the Manifest block is intended to record the actions of a security acceptor as defined by BPSec <xref target="RFC9172"/>.
+        </t>
+        <t>
+When this reason is present in the metadata map, each block data map <bcp14>SHALL</bcp14> contain the following items:
+        </t>
+        <ul>
+          <li>Block Identity (key 1) having a covered block type of either 11 or 12</li>
+          <li>Security Targets (key -1)</li>
+          <li>Security Context ID (key -2)</li>
+        </ul>
+        <t>
+Multiple block data maps <bcp14>MAY</bcp14> be present as needed to indicate all acceptance actions performed by the node across any security blocks in the Bundle.
+        </t>
+        <t>
+Because this reason is meant to be used when the referenced security operations (and their security targets), the containing Manifest is not meant to be verified by any node.
+It is a recording of what <em>was</em> present before the security acceptance.
+        </t>
+      </section>
+    </section>
+    <section anchor="sec-security">
+      <name>Security Considerations</name>
+      <t>
+This section separates security considerations into threat categories based on guidance of BCP 72 <xref target="RFC3552"/>.
+      </t>
+      <section>
+        <name>Threat: Passive Leak of Bundle Data</name>
+        <t>
+The use of a Manifest block does not cause any additional visibility of data at the time the Manifest is added to a Bundle.
+All of its metadata and block data is derived from other block items already visible to any handler of the Bundle.
+        </t>
+        <t>
+It is possible that a block covered by a Manifest is later made the target of a confidentiality operation and its BTSD becomes ciphertext.
+Even in this case, the block data items defined by this specification in <xref target="sec-content"/> do not directly leak the BTSD, only information <em>derived from</em> the BTSD is present in the Manifest.
+The strength of the BTSD Hash item is a separate consideration discussed in <xref target="sec-security-weakhash"/>.
+        </t>
+        <t>
+Future block data item definitions are <bcp14>RECOMMENDED</bcp14> to consider if and how they reveal information from the BTSD of covered blocks.
+        </t>
+      </section>
+      <section anchor="sec-security-weakhash">
+        <name>Threat: Weak Hash Algorithms</name>
+        <t>
+When used as defined in <xref target="sec-reason-aad-hashing"/> the hashing function(s) become part of the overall security verification.
+A weak strength hash algorithm in a Manifest will lower the cryptographic binding to the associated BTSD down to the strength of that hashing.
+        </t>
+        <t>
+When used as BPSec AAD, the choice of BTSD hash algorithm(s) in a Manifest <bcp14>SHALL</bcp14> be at least as strong as the overall security strength of the associated integrity or confidentiality algorithm(s).
+        </t>
+      </section>
+      <section anchor="sec-threat-untrust-manifest">
+        <name>Threat: Untrusted Manifest</name>
+        <t>
+The mere presence of a Manifest block in a Bundle does not grant any implied trust for the metadata or block data contained in the Manifest.
+A BPA can compare the block data within a Manifest with the actual blocks of a Bundle before any related security processing to catch mismatches early, but the results of any such comparison need to be treated as conditional on trust of the Manifest block itself.
+        </t>
+        <t>
+Beyond the specific use in <xref target="sec-reason-aad-hashing"/>, each Manifest block <bcp14>SHOULD</bcp14> be the target or AAD of an associated BPSec integrity operation.
+        </t>
+      </section>
+      <section anchor="sec-threat-manip">
+        <name>Threat: Manipulated Manifest</name>
+        <t>
+Any Manifest block which is kept in plaintext (<em>i.e.</em>, is not the target of a BPSec confidentially operation) is vulnerable to on-path manipulation of its block content, either in-transit or at-rest.
+        </t>
+        <t>
+The verification requirements in <xref target="sec-proc-verify"/> ensure that entities processing a Manifest block verify not just the contents of the Manifest itself but also verify that the contained block data matches the actual Bundle contents.
+        </t>
+      </section>
+    </section>
+    <section anchor="sec-iana">
+      <name>IANA Considerations</name>
+      <t>
+This section provides guidance to the Internet Assigned Numbers Authority (IANA) regarding registration of code points in existing registries and creation of new registries in accordance with BCP 26 <xref target="RFC8126"/>.
+      </t>
+      <section anchor="sec-iana-bundle">
+        <name>BPv7 Block Type</name>
+        <t>
+IANA has registered, under the "Bundle Protocol" registry group <xref target="IANA-BUNDLE"/>, an entry in the registry "Bundle Block Types" with the following information.
+        </t>
+        <table align="center" anchor="tab-iana-block-type">
+          <name>Bundle Block Types</name>
+          <thead>
+            <tr>
+              <th>Bundle Protocol Version</th>
+              <th>Value</th>
+              <th>Description</th>
+              <th>Reference</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>7</td>
+              <td><cref>TBA1</cref></td>
+              <td>Manifest</td>
+              <td>[This specification]</td>
+            </tr>
+          </tbody>
+        </table>
+        <t>IANA NOTE: The <cref>TBA1</cref> requested value is the lowest unassigned value (13).</t>
+      </section>
+      <section anchor="sec-iana-manifest">
+        <name>Manifest Registries</name>
+        <t>EDITOR NOTE: registries to-be-created upon publication of this specification.</t>
+        <t>
+For all of the registries defined in this section, expert(s) are encouraged to be biased towards approving registrations unless they are abusive, frivolous, or actively harmful (not merely aesthetically displeasing, or architecturally dubious).
+        </t>
+        <t>
+Specifications of new metadata items need to define the CBOR item structure of the map value as well as the interpretation of that value by entities processing the Manifest.
+Entities will ignore items with an unknown key, and that behavior needs to be considered by new items.
+        </t>
+        <t>
+IANA has created, under the "Bundle Protocol" registry group <xref target="IANA-BUNDLE"/>, a registry titled "Manifest Metadata Items" and initialize it with the contents of <xref target="tab-iana-manifest-metadata"/>.
+For positive code points the registration procedure is Specification Required.
+Negative code points are reserved for use on private networks for functions not published to the IANA.
+        </t>
+        <table align="center" anchor="tab-iana-manifest-metadata">
+          <name>Manifest Metadata Items</name>
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th>Name</th>
+              <th>Value Type</th>
+              <th>References</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>-32768 to -32641</td>
+              <td>Reserved for Experimental Use</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>-32640 to -1</td>
+              <td>Reserved for Private Use</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>0</td>
+              <td>Reason</td>
+              <td><tt>int16</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Manifest Source</td>
+              <td><tt>embed-eid-structure</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Timestamp</td>
+              <td><tt>dtn-time</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>4 to 32767</td>
+              <td>Unassigned</td>
+              <td/>
+              <td/>
+            </tr>
+          </tbody>
+        </table>
+        <t>
+IANA has created, under the "Bundle Protocol" registry group <xref target="IANA-BUNDLE"/>, a registry titled "Manifest Reason Codes" and initialize it with the contents of <xref target="tab-iana-manifest-reason"/>.
+For positive code points the registration procedure is Specification Required.
+Negative code points are reserved for use on private networks for functions not published to the IANA.
+        </t>
+        <table align="center" anchor="tab-iana-manifest-reason">
+          <name>Manifest Reason Codes</name>
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Name</th>
+              <th>References</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>-32768 to -32641</td>
+              <td>Reserved for Experimental Use</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>-32640 to -1</td>
+              <td>Reserved for Private Use</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>0</td>
+              <td>Reserved</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>1</td>
+              <td>Security AAD Hashing</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>Preserve Extensions</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>Security Acceptance</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>4 to 32767</td>
+              <td>Unassigned</td>
+              <td/>
+            </tr>
+          </tbody>
+        </table>
+        <t>
+IANA has created, under the "Bundle Protocol" registry group <xref target="IANA-BUNDLE"/>, a registry titled "Manifest Data Items" and initialize it with the contents of <xref target="tab-iana-manifest-data"/>.
+For non-negative code points the registration procedure is Specification Required and the Block Type column is empty.
+For negative code points the registration procedure is Specification Required and the Block Type column references a type from the "Bundle Block Types" registry in the same group.
+        </t>
+        <table align="center" anchor="tab-iana-manifest-data">
+          <name>Manifest Data Items</name>
+          <thead>
+            <tr>
+              <th>Block Type</th>
+              <th>Key</th>
+              <th>Name</th>
+              <th>Value Type</th>
+              <th>References</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td/>
+              <td>0</td>
+              <td>Reserved</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>1</td>
+              <td>Block Identity</td>
+              <td>array of <tt>uint</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>2</td>
+              <td>Block Flags</td>
+              <td><tt>uint</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>5</td>
+              <td>BTSD Length</td>
+              <td><tt>uint</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>6</td>
+              <td>BTSD Hash</td>
+              <td><tt>btsd-hash</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>7 to 31614</td>
+              <td>Unassigned</td>
+              <td/>
+              <td/>
+            </tr>
+            <tr>
+              <td/>
+              <td>31615 to 32639</td>
+              <td>Reserved for Private Use</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>32640 to 32767</td>
+              <td>Reserved for Experimental Use</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td align="center" colspan="5">Block Type Specific items follow</td>
+            </tr>
+            <tr>
+              <td>11,12</td>
+              <td>-1</td>
+              <td>Security Targets</td>
+              <td>array of <tt>uint</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>11,12</td>
+              <td>-2</td>
+              <td>Security Context ID</td>
+              <td><tt>int16</tt></td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>-31616 to -32640</td>
+              <td>Reserved for Private Use</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td/>
+              <td>-32641 to -32768</td>
+              <td>Reserved for Experimental Use</td>
+              <td/>
+              <td>[This specification]</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </section>
+  </middle>
+  <back>
+    <references>
+      <name>References</name>
+      <references>
+        <name>Normative References</name>
+        <reference anchor="IANA-BUNDLE" target="https://www.iana.org/assignments/bundle/">
+          <front>
+            <title>Bundle Protocol</title>
+            <author>
+              <organization>IANA</organization>
+            </author>
+            <date/>
+          </front>
+        </reference>
+        <reference anchor="IANA-COSE" target="https://www.iana.org/assignments/cose/">
+          <front>
+            <title>CBOR Object Signing and Encryption (COSE)</title>
+            <author>
+              <organization>IANA</organization>
+            </author>
+            <date/>
+          </front>
+        </reference>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.8610.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.8174.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.8742.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.9171.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.9172.xml"/>
+      </references>
+      <references>
+        <name>Informative References</name>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.3552.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.5050.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.8126.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-dtn-bpsec-cose.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-dtn-eid-pattern.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-cose-hash-envelope.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.tian-dtn-sbam.xml"/>
+      </references>
+    </references>
+    <section anchor="sec-doc-ack" numbered="false">
+      <name>Acknowledgments</name>
+      <t>
+       </t>
+    </section>
+  </back>
+</rfc>

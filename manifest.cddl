@@ -1,0 +1,51 @@
+start = ext-data-manifest
+
+; Manifest is encoded in BTSD content as a sequence
+$extension-block /=
+  extension-block-use<255, (bstr .cborseq ext-data-manifest / bstr)>
+ext-data-manifest = [
+  source: embed-eid-structure,
+  timestamp: dtn-time,
+  * block-manifest
+]
+
+embed-eid-structure = bstr .cbor eid-structure
+
+; Info for a single block
+block-manifest = $manifest-map .within manifest-structure
+$manifest-map /= {* $$manifest-item }
+manifest-structure = {
+  * int16 => any
+}
+int16 = -65536 .. 65535
+
+$$manifest-item //= (
+  ? 1: block-id
+)
+block-id = [
+  block-num: uint,
+  ? (
+    block-type: uint,
+    ? block-flags: uint ; or rule block-control-flags
+  )
+]
+
+$$manifest-item //= (
+  ? 2: btsd-len
+)
+btsd-len = uint
+
+$$manifest-item //= (
+  3: btsd-hash
+)
+btsd-hash = [
+  alg: alg-id,
+  value: bstr
+]
+; From the IANA COSE registry, only hash algorithms allowed
+alg-id = tstr / int
+
+$$manifest-item //= (
+  10: bpsec-targets
+)
+bpsec-targets = [+ uint ]
