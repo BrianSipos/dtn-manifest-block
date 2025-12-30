@@ -211,7 +211,7 @@ This array has the same order as the first two items of the canonical block arra
             <name>Block Identity CDDL</name>
             <sourcecode type="cddl"><![CDATA[
 $$blockdata-item //= (
-  ? 1: block-id
+  1: block-id
 )
 block-id = [
   ; From the IANA Bundle Block Types registry
@@ -235,7 +235,7 @@ This item <bcp14>SHALL</bcp14> use map key 2 and value of a <tt>uint</tt> repres
             <name>Block Flags CDDL</name>
             <sourcecode type="cddl"><![CDATA[
 $$blockdata-item //= (
-  ? 2: block-control-flags
+  2: block-control-flags
 )
 ]]></sourcecode>
           </figure>
@@ -494,6 +494,33 @@ Although successful verification now requires both BPSec verification and Manife
 Choosing a desirable order allows an implementation to optimize further for expected success and failure modes.
         </t>
       </section>
+      <section anchor="sec-reason-sec-source">
+        <name>Security Sourcing</name>
+        <t>
+When a BPSec security operation is created by a node, as its security source, the security target and its associated security results are embodied within the ASB structure of its parent security block.
+Because the ASB retains no history of security actions, later updates in the lifecycle of the security operation can cause the parent security block to be modified or even discarded (<em>e.g.</em>, if the operation is accepted before the destination node).
+The reason defined in this section allows security sourcing to be recorded for downstream auditing <xref target="I-D.tian-dtn-sbam"/>.
+        </t>
+        <t>
+The Manifest reason "Security Sourcing" (code 3) <bcp14>SHALL</bcp14> be used to indicate that the Manifest block is intended to record the actions of a security source as defined by BPSec <xref target="RFC9172"/>.
+        </t>
+        <t>
+When this reason is present in the metadata map, each block data map <bcp14>SHALL</bcp14> contain the following items:
+        </t>
+        <ul>
+          <li>Block Identity (key 1) having a covered block type of either 11 or 12 and having a Security Source field from the same node as the Manifest Source</li>
+          <li>Security Targets (key -1)</li>
+          <li>Security Context ID (key -2)</li>
+          <li><cref>Additional data about key identifiers?</cref></li>
+        </ul>
+        <t>
+Multiple block data maps <bcp14>MAY</bcp14> be present as needed to indicate all sourcing actions performed by the node across any security blocks in the Bundle.
+        </t>
+        <t>
+Because this reason is meant to be used separately from the covered security blocks themselves, with a likely longer block lifecycle, the containing Manifest is not meant to be verified (in the sense of <xref target="sec-proc-verify"/>) by any node.
+This reason can be coupled with <xref format="title" target="sec-reason-sec-accept"/> manifest(s) to audit the lifecycles of those covered security blocks.
+        </t>
+      </section>
       <section anchor="sec-reason-sec-accept">
         <name>Security Acceptance</name>
         <t>
@@ -502,7 +529,7 @@ Because the ASB retains no history of security actions, a removal due to accepta
 The reason defined in this section allows security acceptance to be recorded for downstream auditing <xref target="I-D.tian-dtn-sbam"/>.
         </t>
         <t>
-The Manifest reason "Security Acceptance" (code 3) <bcp14>SHALL</bcp14> be used to indicate that the Manifest block is intended to record the actions of a security acceptor as defined by BPSec <xref target="RFC9172"/>.
+The Manifest reason "Security Acceptance" (code 4) <bcp14>SHALL</bcp14> be used to indicate that the Manifest block is intended to record the actions of a security acceptor as defined by BPSec <xref target="RFC9172"/>.
         </t>
         <t>
 When this reason is present in the metadata map, each block data map <bcp14>SHALL</bcp14> contain the following items:
@@ -511,13 +538,14 @@ When this reason is present in the metadata map, each block data map <bcp14>SHAL
           <li>Block Identity (key 1) having a covered block type of either 11 or 12</li>
           <li>Security Targets (key -1)</li>
           <li>Security Context ID (key -2)</li>
+          <li><cref>Additional data about key identifiers?</cref></li>
         </ul>
         <t>
 Multiple block data maps <bcp14>MAY</bcp14> be present as needed to indicate all acceptance actions performed by the node across any security blocks in the Bundle.
         </t>
         <t>
-Because this reason is meant to be used when the referenced security operations (and their security targets), the containing Manifest is not meant to be verified by any node.
-It is a recording of what <em>was</em> present before the security acceptance.
+Because this reason is meant to be used when the referenced security operations (and their security targets) are removed from their parent security blocks, the containing Manifest is not meant to be verified (in the sense of <xref target="sec-proc-verify"/>) by any node.
+It is a recording of what <em>was</em> present before the security acceptance and meant to be coupled with either <xref format="title" target="sec-reason-sec-source"/> manifest(s) or out-of-band information about expected security operations.
         </t>
       </section>
     </section>
@@ -708,11 +736,16 @@ Negative code points are reserved for use on private networks for functions not 
             </tr>
             <tr>
               <td>3</td>
+              <td>Security Sourcing</td>
+              <td>[This specification]</td>
+            </tr>
+            <tr>
+              <td>4</td>
               <td>Security Acceptance</td>
               <td>[This specification]</td>
             </tr>
             <tr>
-              <td>4 to 32767</td>
+              <td>5 to 32767</td>
               <td>Unassigned</td>
               <td/>
             </tr>
