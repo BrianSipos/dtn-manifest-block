@@ -18,6 +18,7 @@ dbus
 dtn
 EID
 IANA
+IETF
 lifecycle
 lifecycles
 LLC
