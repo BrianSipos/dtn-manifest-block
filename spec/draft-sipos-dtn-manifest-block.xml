@@ -472,7 +472,7 @@ For cases where the AAD covers large BTSD, including that of the payload block, 
         </figure>
         <t>
 A common way to mitigate this need for cryptographic processing of large data is distill the data using a hash algorithm and then use the hash value as input to the cryptographic function.
-This technique of "preimage hashing" is available for the target of a security operation using a COSE Hash Envelope <xref target="I-D.ietf-cose-hash-envelope"/> but is not available for its external AAD, so a large block with its BTSD as part of security operation AAD will constrain the processing of that operation (both as security source and verifier/acceptor).
+This technique of "preimage hashing" is available for the target of a security operation using a COSE Hash Envelope <xref target="RFC9995"/> but is not available for its external AAD, so a large block with its BTSD as part of security operation AAD will constrain the processing of that operation (both as security source and verifier/acceptor).
 A straightforward use of a Manifest block, defined later in this section, is to capture the hash values of other blocks for external AAD coverage and thus reduce the size of that external AAD needed as cryptographic input.
         </t>
         <figure>
@@ -930,9 +930,9 @@ For negative code points the registration procedure is Specification Required an
         <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.5706.xml"/>
         <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.8126.xml"/>
         <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.9173.xml"/>
+        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml/reference.RFC.9995.xml"/>
         <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-dtn-bpsec-cose.xml"/>
         <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-dtn-eid-pattern.xml"/>
-        <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.ietf-cose-hash-envelope.xml"/>
         <xi:include href="https://xml2rfc.tools.ietf.org/public/rfc/bibxml3/reference.I-D.tian-dtn-sbam.xml"/>
       </references>
     </references>
